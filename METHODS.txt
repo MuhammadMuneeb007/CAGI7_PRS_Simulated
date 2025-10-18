@@ -1,0 +1,607 @@
+================================================================================
+CAGI7 POLYGENIC RISK SCORE CHALLENGE - METHODS DESCRIPTION
+================================================================================
+
+Submission Team: Muhammad Muneeb, BioSig Lab, The University of Queensland
+Contact: m.muneeb@uq.edu.au, muneebsiddique007@gmail.com
+Date: October 2025
+
+================================================================================
+1. OVERVIEW
+================================================================================
+
+This document describes the computational methodology used for predicting 
+disease outcomes in the CAGI7 Polygenic Risk Score (PRS) Challenge for 30 
+simulated phenotypes. Our approach implements a comprehensive pipeline that 
+combines multiple state-of-the-art PRS methods with advanced machine learning 
+techniques to generate robust predictions.
+
+================================================================================
+2. DATA PREPARATION AND QUALITY CONTROL
+================================================================================
+
+2.1 Initial Data Processing
+----------------------------
+Input Data per Phenotype:
+- Training genotypes: PLINK format (.bed/.bim/.fam), n=5,000 individuals
+- Validation genotypes: PLINK format, n=50,000 individuals
+- GWAS summary statistics: n=100,000 (chr, pos, snpid, ref, alt, pval, effalt, reffreq)
+- Genome assembly: GRCh37
+- SNP count: ~5 million common variants
+
+Data Organization:
+- Each phenotype organized in dedicated directory (Phenotype_1 to Phenotype_30)
+- Phenotype encoding: 1=control, 2=case (PLINK standard format)
+- Case/control ratio: 1:1 in training data (2,500 cases, 2,500 controls)
+
+2.2 GWAS Summary Statistics Transformation
+-------------------------------------------
+The raw GWAS files were transformed to standardized format:
+
+Column Mapping:
+- CHR: Chromosome number (extracted from 'chr' field, removed 'chr' prefix)
+- BP: Base pair position (from 'pos' field)
+- SNP: SNP identifier (from 'snpid' field)
+- A1: Effect allele (from 'alt' field)
+- A2: Reference allele (from 'ref' field)
+- P: P-value (from 'pval' field)
+- BETA: Effect size on log-odds scale (from 'effalt' field)
+- OR: Odds ratio (calculated as OR = exp(BETA))
+- MAF: Minor allele frequency (calculated from 'reffreq', MAF = min(freq, 1-freq))
+- N: Sample size (set to 100,000 for all SNPs)
+- SE: Standard error (set to 0.001 as placeholder, recalculated for specific methods)
+- INFO: Imputation quality score (set to 0.9 as default)
+
+2.3 Quality Control Filters
+----------------------------
+Applied the following SNP-level QC filters:
+
+1. Minor Allele Frequency (MAF):
+   - Threshold: MAF > 0.01
+   - Rationale: Remove rare variants with unreliable effect estimates
+
+2. Imputation Quality:
+   - Threshold: INFO > 0.8
+   - Rationale: Retain only well-imputed variants
+
+3. Ambiguous SNPs:
+   - Removed: A/T, T/A, G/C, C/G SNPs
+   - Rationale: Avoid strand ambiguity issues
+
+4. Duplicate SNPs:
+   - Action: Remove duplicates based on SNP ID
+   - Method: Keep first occurrence
+
+Typical SNP retention after QC: ~85-90% of original variants
+
+2.4 Cross-Validation Framework
+-------------------------------
+Implemented 5-fold stratified cross-validation:
+
+Fold Configuration:
+- Training set per fold: 4,000 individuals (2,000 cases, 2,000 controls)
+- Test set per fold: 1,000 individuals (500 cases, 500 controls)
+- Stratification: Maintains 50% case prevalence in all folds
+- Method: sklearn.model_selection.StratifiedKFold with random_state=42
+
+Covariate Generation:
+- Principal Components: 6 PCs calculated from pruned genotype data
+- Sex: Extracted from .fam file (column 5)
+- Phenotype: Binary outcome (1=control, 2=case)
+
+================================================================================
+3. POLYGENIC RISK SCORE METHODS
+================================================================================
+
+We implemented six different PRS calculation methods, each with distinct 
+algorithmic approaches and assumptions about genetic architecture:
+
+3.1 PLINK P-VALUE THRESHOLDING (P+T)
+-------------------------------------
+Method: Standard clumping and thresholding approach
+Software: PLINK v1.9
+
+Parameters:
+- P-value thresholds: 5,000 thresholds ranging from 10^-180 to 1.0 (log-spaced)
+- LD clumping: r² < 0.1, 200kb window, p1 = 1.0
+- LD pruning: window=200 SNPs, slide=50 SNPs, r² < 0.25
+
+Algorithm:
+1. Perform LD-based clumping on GWAS summary statistics
+2. Extract independent SNPs (prune.in file)
+3. For each p-value threshold:
+   a. Select SNPs with P < threshold
+   b. Calculate PRS = Σ(beta_i × dosage_i) for each individual
+   c. Evaluate AUC on test fold
+4. Select optimal threshold maximizing test AUC
+5. Generate validation predictions using optimal threshold
+
+Effect Size: Raw BETA from GWAS (log-odds scale)
+
+3.2 GCTA-COJO (CONDITIONAL AND JOINT ANALYSIS)
+-----------------------------------------------
+Method: Joint effects estimation accounting for LD
+Software: GCTA v1.94.1
+
+Parameters:
+- P-value thresholds: 2,000 thresholds ranging from 10^-100 to 1.0
+- LD reference: Training set genotypes
+- COJO parameters: Default settings
+
+Algorithm:
+1. Prepare GWAS summary in GCTA format (SNP, A1, A2, freq, b, se, p, N)
+2. Perform LD-based clumping (same as PLINK)
+3. Run GCTA-COJO conditional analysis:
+   - Estimate joint SNP effects conditional on LD
+   - Account for correlation between effect estimates
+4. For each p-value threshold:
+   a. Select SNPs from COJO results
+   b. Calculate PRS using conditional effect estimates
+   c. Evaluate AUC on test fold
+5. Select optimal threshold and generate predictions
+
+Key Advantage: Reduces false positive associations due to LD
+
+Standard Error Handling:
+- For binary traits: SE calculated from P-values and BETA
+- Formula: Z = sign(BETA) × Φ^(-1)(1 - P/2), SE = |BETA| / |Z|
+- Rationale: Original SE placeholder (0.001) causes GCTA convergence issues
+
+3.3 LDAK (LD-ADJUSTED KINSHIPS)
+--------------------------------
+Method: LD and MAF-weighted heritability estimation
+Software: LDAK v5.2
+
+Parameters:
+- Heritability models: LDAK, LDAK-Thin, BLD-LDAK
+- LD window: 1 cM
+- SNP weighting: Function of LD and MAF
+
+Algorithm:
+1. Transform GWAS to LDAK format (Predictor, A1, A2, n, Z, SNP)
+   - Z-score: Z = sign(BETA) × Φ^(-1)(1 - P/2)
+2. Calculate LD-adjusted SNP weights:
+   - Accounts for local LD patterns
+   - Downweights SNPs in high LD regions
+3. Estimate heritability using weighted kinship matrix
+4. Calculate weighted PRS with adjusted effect sizes
+5. Test multiple heritability models
+6. Select best model based on test AUC
+
+Key Advantage: Improves heritability partitioning by accounting for LD structure
+
+3.4 PRSICE-2 (HIGH-RESOLUTION SCORING)
+---------------------------------------
+Method: Automatic threshold optimization with high resolution
+Software: PRSice-2 v2.3.5
+
+Parameters:
+- P-value range: 10^-100 to 1.0
+- Interval: 0.001 (1,000 thresholds tested)
+- LD clumping: r² < 0.1, 250kb window
+- Regression: Logistic (binary trait)
+
+Algorithm:
+1. PRSice-2 performs integrated clumping and scoring:
+   a. Clump GWAS summary statistics
+   b. Generate PRS across all p-value thresholds
+   c. Fit logistic regression: Phenotype ~ PRS + Covariates
+   d. Calculate R² and P-value for each threshold
+2. Identify best-fit threshold (highest R²/pseudo-R²)
+3. Generate predictions for validation set using best-fit parameters
+
+Effect Size Handling:
+- Binary traits: Uses OR (exponential of BETA)
+- Continuous traits: Uses BETA directly
+
+Key Advantage: Automated selection of optimal threshold, handles covariates
+
+3.5 LDPRED-2 AND LASSOSUM
+--------------------------
+Method: Bayesian shrinkage with LD reference
+Software: R packages bigsnpr and lassosum
+
+Parameters:
+- Heritability models: Estimated from data
+- Lasso penalty: Grid search over lambda values
+- Delta parameter: Sparsity control
+- LD radius: 1 Mb
+
+Algorithm:
+1. Calculate LD correlation matrix from training genotypes
+2. LDpred-2 approach:
+   a. Estimate heritability using LD score regression
+   b. Apply Bayesian shrinkage to GWAS effect sizes
+   c. Account for LD correlation structure
+   d. Test multiple heritability assumptions
+3. Lassosum approach:
+   a. Penalized regression with elastic net
+   b. Tune lambda (shrinkage) and delta (sparsity)
+   c. Cross-validation for hyperparameter selection
+4. Calculate PRS using shrunk effect sizes
+5. Select best model based on validation performance
+
+Key Advantage: Shrinkage reduces overfitting, improves portability
+
+Heritability Models Tested:
+- h² estimates: 0.1, 0.3, 0.5, 0.7, 0.9
+- Sparse models: Various causal fractions
+
+3.6 LDPRED-GIBBS (GIBBS SAMPLING)
+----------------------------------
+Method: MCMC sampling of posterior effect size distributions
+Software: LDpred (Python implementation)
+
+Parameters:
+- Fraction of causal SNPs: 0.001, 0.01, 0.1, 0.3, 1.0
+- Burn-in iterations: 500
+- Sampling iterations: 1,000
+- LD radius: Default (1 Mb)
+
+Algorithm:
+1. Prepare GWAS in LDpred format (CHR, POS, SNP_ID, REF, ALT, REF_FRQ, PVAL, BETA, SE, N)
+2. Coordinate genotypes and summary statistics
+3. Gibbs sampling procedure:
+   a. Initialize effect sizes from GWAS
+   b. For each iteration:
+      - Sample causal status for each SNP
+      - Sample effect size from posterior distribution
+      - Update based on LD structure
+   c. Burn-in: Discard first 500 iterations
+   d. Collect samples: Average over 1,000 iterations
+4. Calculate posterior mean effect sizes
+5. Generate PRS using posterior means
+6. Test multiple causal fraction assumptions
+7. Select best model based on validation AUC
+
+Key Advantage: Flexible modeling of genetic architecture, uncertainty quantification
+
+Standard Error Calculation:
+- For binary traits: SE = |BETA| / |Z-score|
+- Z-score from P-value: Z = sign(BETA) × Φ^(-1)(1 - P/2)
+
+================================================================================
+4. MODEL SELECTION AND EVALUATION
+================================================================================
+
+4.1 Performance Metrics
+-----------------------
+Primary Metric:
+- AUC-ROC (Area Under Receiver Operating Characteristic Curve)
+- Range: 0.5 (random) to 1.0 (perfect discrimination)
+- Calculated using sklearn.metrics.roc_auc_score
+
+Secondary Metrics:
+- Accuracy: (TP + TN) / (TP + TN + FP + FN)
+- Sensitivity: TP / (TP + FN)
+- Specificity: TN / (TN + FP)
+- Pearson correlation: Between PRS and true phenotype
+
+4.2 Model Selection Strategy
+-----------------------------
+For each PRS method:
+
+1. Training Phase (per fold):
+   - Calculate PRS for training individuals
+   - Evaluate training AUC
+   
+2. Testing Phase (per fold):
+   - Calculate PRS for test individuals
+   - Evaluate test AUC
+   
+3. Aggregation Across Folds:
+   - Identify common hyperparameter configurations across all 5 folds
+   - Average train and test AUC across folds
+   - Select configuration with highest mean test AUC
+   
+4. Final Model Selection:
+   - Compare all PRS methods
+   - Select best-performing method per phenotype
+   - Criteria: Highest mean test AUC across folds
+   
+5. Validation Prediction:
+   - Retrain on full training data (all 5,000 individuals)
+   - Apply to validation cohort (50,000 individuals)
+   - Generate final PRS predictions
+
+4.3 Cross-Method Comparison
+----------------------------
+Results aggregated in comprehensive summary tables:
+- Method-specific performance (train/test AUC)
+- Hyperparameter configurations
+- Number of SNPs included in final model
+- Computational time
+
+Best method selection criteria:
+1. Highest test AUC
+2. Lowest overfitting (train-test AUC gap)
+3. Robustness across folds (low standard deviation)
+
+================================================================================
+5. MACHINE LEARNING ENHANCEMENT
+================================================================================
+
+5.1 Feature Engineering
+-----------------------
+Top SNP Selection:
+- Extracted top N SNPs based on GWAS P-values
+- N ∈ {500, 2000, 5000, 10000}
+- Generated genotype dosage matrices (0, 1, 2 for ref allele count)
+
+Feature Preprocessing:
+- Standardization: StandardScaler (mean=0, std=1)
+- Missing data: Imputed with mode (rare, <0.1%)
+- Feature matrix: [n_samples × n_SNPs]
+
+5.2 Deep Neural Network Architectures
+--------------------------------------
+
+Architecture 1: Wide and Deep Network
+- Input layer: n_SNPs features
+- Hidden layers: 512 → 256 → 128 → 64 neurons
+- Batch normalization after each layer
+- Dropout: 0.5, 0.4, 0.3, 0.2 (progressive reduction)
+- Activation: ReLU
+- Output: 1 neuron (logit)
+
+Architecture 2: Residual Network
+- Input layer: n_SNPs → 256 neurons
+- Residual block: 256 → 256 → 256 with skip connection
+- Reduction layers: 256 → 128 → 64
+- Batch normalization and dropout (0.3)
+- Activation: ReLU
+- Output: 1 neuron (logit)
+
+Architecture 3: Deep Narrow Network
+- Input layer: n_SNPs → 256 neurons
+- Hidden layers: 256 → 128 → 64 → 32 → 16 neurons
+- Higher regularization (dropout 0.4)
+- Deeper architecture for complex patterns
+- Output: 1 neuron (logit)
+
+5.3 Training Configuration
+---------------------------
+Loss Function: Binary Cross-Entropy with Logits
+Optimizer: Adam (learning_rate=0.001, betas=(0.9, 0.999))
+Batch Size: 64
+Epochs: 100 (with early stopping, patience=10)
+Class Balancing: WeightedRandomSampler
+  - Weight for cases: n_samples / (2 × n_cases)
+  - Weight for controls: n_samples / (2 × n_controls)
+
+Training Strategy:
+1. 5-fold cross-validation (same folds as PRS methods)
+2. Early stopping based on validation loss
+3. Model checkpointing (save best model)
+4. Learning rate scheduling (ReduceLROnPlateau)
+
+Regularization:
+- Dropout layers
+- L2 weight decay (1e-5)
+- Batch normalization
+- Early stopping
+
+5.4 Model Evaluation and Selection
+-----------------------------------
+For each architecture and SNP count:
+1. Train on 4 folds, validate on 1 fold
+2. Calculate validation AUC
+3. Repeat for all 5 folds
+4. Average validation AUC
+
+Best model selection:
+- Highest mean validation AUC
+- Lowest variance across folds
+- Train final model on all training data
+- Generate predictions for validation cohort
+
+5.5 Ensemble Methods
+--------------------
+Ensemble Strategy 1: Averaging
+- Average predictions from top 3 architectures
+- Weight by validation performance
+
+Ensemble Strategy 2: Stacking
+- Use predictions from multiple PRS methods as features
+- Train meta-learner (logistic regression or neural network)
+- Cross-validated stacking to avoid overfitting
+
+================================================================================
+6. PREDICTION GENERATION FOR VALIDATION COHORT
+================================================================================
+
+6.1 Final Model Training
+-------------------------
+For selected best method per phenotype:
+1. Retrain on complete training set (5,000 individuals)
+2. Use optimal hyperparameters from cross-validation
+3. Apply same QC and preprocessing steps
+
+6.2 Validation Predictions
+---------------------------
+Generate predictions for validation cohort:
+- Input: Validation genotypes (50,000 individuals)
+- Output: PRS for each individual (continuous score)
+- Format: Tab-delimited file (FID, IID, PRS)
+
+PRS Interpretation:
+- Higher PRS → Higher disease risk
+- PRS is on standardized scale (may be normalized)
+- Not calibrated probabilities (requires additional calibration)
+
+6.3 Quality Control Checks
+---------------------------
+- No missing predictions
+- PRS distribution checked for outliers
+- Comparison with training PRS distribution
+- Verification of file format compliance
+
+================================================================================
+7. SUBMISSION FILES
+================================================================================
+
+7.1 File Format
+---------------
+Validation Predictions:
+- Filename: Phenotype_X_predictions.csv
+- Columns: FID, IID, PRS
+- Format: Tab-delimited
+- Rows: 50,000 (one per validation individual)
+
+Summary Table:
+- Filename: Phenotype_X_Summary_Table.csv
+- Contains: Method comparison, cross-validation results
+- Metrics: Train AUC, Test AUC, selected hyperparameters
+
+7.2 Method Description
+-----------------------
+Each submission includes:
+- README.txt: Detailed method description
+- Best method selected
+- Hyperparameters used
+- Number of SNPs in final model
+- Cross-validation performance
+
+================================================================================
+8. COMPUTATIONAL DETAILS
+================================================================================
+
+8.1 Software Versions
+---------------------
+- Python: 3.8+
+- PLINK: v1.9 and v2.0
+- GCTA: v1.94.1
+- LDAK: v5.2
+- PRSice-2: v2.3.5
+- R: v4.1+ (for LDpred-2, Lassosum)
+- PyTorch: v1.10+ (for deep learning)
+
+Python Packages:
+- pandas: 1.3+
+- numpy: 1.21+
+- scikit-learn: 1.0+
+- scipy: 1.7+
+- matplotlib: 3.4+
+- seaborn: 0.11+
+
+8.2 Computational Resources
+----------------------------
+- CPU: 16+ cores recommended
+- RAM: 32GB+ recommended
+- Storage: 500GB for full dataset
+- GPU: Optional (accelerates deep learning, NVIDIA with CUDA support)
+
+8.3 Runtime Estimates (per phenotype)
+--------------------------------------
+- Data preparation: ~5 minutes
+- PLINK P+T: ~30 minutes (5 folds)
+- GCTA-COJO: ~1-2 hours (5 folds)
+- LDAK: ~2-3 hours (5 folds)
+- PRSice-2: ~20 minutes (5 folds)
+- LDpred-2: ~1-2 hours (5 folds)
+- LDpred-gibbs: ~2-4 hours (5 folds)
+- Deep learning: ~1-3 hours (depends on GPU, SNP count)
+
+Total per phenotype: ~6-12 hours (parallelizable)
+
+================================================================================
+9. LIMITATIONS AND CONSIDERATIONS
+================================================================================
+
+9.1 Population Specificity
+---------------------------
+- Models trained on European ancestry individuals
+- LD patterns specific to European populations
+- Transferability to other ancestries not evaluated
+- Results may not generalize to non-European populations
+
+9.2 Simulated Data Characteristics
+-----------------------------------
+- Spike-and-slab genetic architecture
+- Known LD structure from 1000 Genomes
+- Simplified disease model (binary outcome, 5% prevalence)
+- No environmental factors or gene-environment interactions
+
+9.3 Model Assumptions
+---------------------
+- Additive genetic effects (no dominance or epistasis)
+- Independent SNP effects (except methods accounting for LD)
+- Linear relationship between genotype and log-odds
+- No population stratification (corrected via PCs)
+
+9.4 Technical Limitations
+--------------------------
+- Standard error placeholders in original GWAS may affect some methods
+- Limited sample size for training (5,000 individuals)
+- Computational constraints limit exhaustive hyperparameter search
+- Cross-validation on same dataset (no truly independent validation)
+
+================================================================================
+10. VALIDATION AND REPRODUCIBILITY
+================================================================================
+
+10.1 Random Seeds
+-----------------
+All stochastic processes use fixed random seeds:
+- Cross-validation splits: random_state=42
+- Neural network initialization: torch.manual_seed(42)
+- Gibbs sampling: seed=123
+
+10.2 Reproducibility
+--------------------
+To reproduce results:
+1. Use specified software versions
+2. Apply same QC filters and parameters
+3. Use provided random seeds
+4. Follow pipeline in sequential order (Step1 → Step8)
+
+10.3 Code Availability
+----------------------
+Complete pipeline available at:
+https://github.com/MuhammadMuneeb007/CAGI7_PRS_Simulated
+
+================================================================================
+11. REFERENCES
+================================================================================
+
+Key Publications:
+
+1. Choi SW, O'Reilly PF (2019). PRSice-2: Polygenic Risk Score software for 
+   biobank-scale data. GigaScience 8(7):giz082.
+
+2. Vilhjálmsson BJ, et al. (2015). Modeling linkage disequilibrium increases 
+   accuracy of polygenic risk scores. Am J Hum Genet 97(4):576-592.
+
+3. Privé F, et al. (2020). LDpred2: better, faster, stronger. Bioinformatics 
+   36(22-23):5424-5431.
+
+4. Yang J, et al. (2012). Conditional and joint multiple-SNP analysis of GWAS 
+   summary statistics identifies additional variants. Nat Genet 44(4):369-375.
+
+5. Speed D, et al. (2017). Reevaluation of SNP heritability in complex human 
+   traits. Nat Genet 49(7):986-992.
+
+6. Purcell S, et al. (2007). PLINK: A tool set for whole-genome association 
+   and population-based linkage analyses. Am J Hum Genet 81(3):559-575.
+
+================================================================================
+CONTACT INFORMATION
+================================================================================
+
+Muhammad Muneeb
+The University of Queensland
+BioSig Lab
+Brisbane, QLD, Australia
+
+Email: m.muneeb@uq.edu.au
+       muneebsiddique007@gmail.com
+       
+GitHub: https://github.com/MuhammadMuneeb007
+Google Scholar: https://scholar.google.com/citations?user=X0xdltIAAAAJ
+
+Supervisor: Prof. David Ascher
+Lab Website: https://biosig.lab.uq.edu.au/
+
+================================================================================
+END OF METHODS DOCUMENT
+================================================================================
