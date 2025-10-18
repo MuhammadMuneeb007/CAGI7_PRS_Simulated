@@ -434,10 +434,87 @@ Implements multiple neural network architectures:
 | `Step6data_loaderMachineLearningModelstesting.py`               | Data loading utilities       | DataLoader, preprocessing      |
 
 ---
- 
+
+## 🧬 PRS Methods Implemented
+
+This pipeline implements six state-of-the-art PRS calculation methods, each with unique approaches to modeling genetic architecture:
+
+### 1. **PLINK P-Value Thresholding (P+T)**
+- **Software**: PLINK v1.9
+- **Approach**: Standard clumping and thresholding
+- **Parameters**: 5,000 p-value thresholds (10⁻¹⁸⁰ to 1.0)
+- **LD Clumping**: r² < 0.1, 200kb window
+- **Best For**: Simple genetic architectures, computational efficiency
+
+### 2. **GCTA-COJO (Conditional and Joint Analysis)**
+- **Software**: GCTA v1.94.1
+- **Approach**: Joint SNP effects estimation accounting for LD
+- **Parameters**: 2,000 p-value thresholds
+- **Key Feature**: Reduces false positives due to LD correlation
+- **Best For**: Complex LD patterns, fine-mapping
+
+### 3. **LDAK (LD-Adjusted Kinships)**
+- **Software**: LDAK v5.2
+- **Approach**: LD and MAF-weighted heritability estimation
+- **Models**: LDAK, LDAK-Thin, BLD-LDAK
+- **Key Feature**: Accounts for local LD patterns and MAF
+- **Best For**: Improved heritability partitioning
+
+### 4. **PRSice-2 (High-Resolution Scoring)**
+- **Software**: PRSice-2 v2.3.5
+- **Approach**: Automatic threshold optimization
+- **Parameters**: 1,000 thresholds (10⁻¹⁰⁰ to 1.0, interval 0.001)
+- **Key Feature**: Integrated clumping, scoring, and regression
+- **Best For**: Automated analysis, covariate adjustment
+
+### 5. **LDpred-2 & Lassosum**
+- **Software**: R packages bigsnpr and lassosum
+- **Approach**: Bayesian shrinkage with LD reference
+- **Key Feature**: Shrinkage reduces overfitting
+- **Models**: Multiple heritability assumptions tested
+- **Best For**: Portability across populations
+
+### 6. **LDpred-gibbs (Gibbs Sampling)**
+- **Software**: LDpred (Python implementation)
+- **Approach**: MCMC sampling of posterior effect distributions
+- **Parameters**: Causal fractions (0.001 to 1.0)
+- **Key Feature**: Flexible genetic architecture modeling
+- **Best For**: Uncertainty quantification, sparse architectures
+
+### Method Selection Strategy
+
+For each phenotype, all methods are evaluated using 5-fold cross-validation:
+1. Calculate PRS across multiple hyperparameter configurations
+2. Evaluate test AUC for each configuration
+3. Select best-performing method based on mean test AUC
+4. Generate final predictions for validation cohort
+
+**Performance Comparison**: See [Results](#results) section for detailed comparisons across all 30 phenotypes.
+
 ---
 
-## �🛠 Installation & Requirements
+## 📖 Detailed Methods Documentation
+
+For comprehensive methodological details, please refer to:
+- **[METHODS.txt](METHODS.txt)**: Complete technical documentation including:
+  - Data preparation and quality control procedures
+  - Detailed algorithm descriptions for each PRS method
+  - Cross-validation framework specifications
+  - Machine learning architecture details
+  - Hyperparameter tuning strategies
+  - Computational requirements and runtime estimates
+  - Validation and reproducibility information
+
+**Key Highlights**:
+- **Quality Control**: MAF > 0.01, INFO > 0.8, ambiguous SNP removal
+- **Cross-Validation**: 5-fold stratified (4,000 train / 1,000 test per fold)
+- **Deep Learning**: Wide and deep, residual, and deep narrow architectures
+- **Ensemble Methods**: Averaging and stacking strategies
+- **Reproducibility**: Fixed random seeds (random_state=42)
+
+---
+
+## 🛠 Installation & Requirements
 
 ### System Requirements
 
@@ -488,11 +565,185 @@ install.packages(c("data.table", "dplyr", "bigsnpr", "bigstatsr", "lassosum"))
 git clone https://github.com/MuhammadMuneeb007/CAGI7_PRS_Simulated.git
 cd CAGI7_PRS_Simulated
 
- 
+# Install Python dependencies
+pip install pandas numpy scipy scikit-learn matplotlib seaborn umap-learn tqdm joblib torch
+
+# Download and install external tools (PLINK, GCTA, LDAK, PRSice-2)
+# See External Tools section above for download links
+
+# Install R packages
+Rscript -e "install.packages(c('data.table', 'dplyr', 'bigsnpr', 'bigstatsr', 'lassosum'), repos='https://cran.r-project.org')"
 ```
 
 ---
- 
+
+## 💻 Usage
+
+### Quick Start
+
+The pipeline is organized into sequential steps. Each step must be completed before proceeding to the next.
+
+#### Step 0: Data Organization
+
+Organize your CAGI7 data files:
+```
+RawData/
+├── Phenotype_1.fam
+├── Phenotype_1.phen
+├── Phenotype_1.gwas
+├── training_genotypes.bed/.bim/.fam
+└── validation_genotypes.bed/.bim/.fam
+```
+
+#### Step 1: Copy and Organize Files
+
+```bash
+# Process all phenotypes (parallelized)
+python Step1-CopyFiles.py
+```
+
+This creates directories `Phenotype_1/` through `Phenotype_30/` with organized data files.
+
+#### Step 2: Transform GWAS Data and Create Folds
+
+```bash
+# Transform GWAS summary statistics and apply QC filters
+python Step2-TransformData.py Phenotype_1
+
+# Count cases/controls and create 5-fold cross-validation splits
+python Step2.1-CountNumberOfCasesAndControls.py Phenotype_1
+```
+
+Repeat for all phenotypes (Phenotype_1 through Phenotype_30).
+
+#### Step 3: Calculate PRS Using Different Methods
+
+Run each PRS method for each phenotype:
+
+```bash
+# PLINK P-value thresholding
+python Step3-Plink3.py Phenotype_1 0  # Fold 0
+python Step3-Plink3.py Phenotype_1 1  # Fold 1
+# ... repeat for Folds 2-4
+
+# GCTA-COJO
+python Step3-GCTA3.py Phenotype_1 0
+
+# LDAK
+python Step3-LDAK-GWAS3.py Phenotype_1 0
+
+# PRSice-2
+python Step3-PRSice-2-3.py Phenotype_1 0
+
+# LDpred-2 and Lassosum
+python Step3-LDpred-2-Lassosum3.py Phenotype_1 0
+
+# LDpred-gibbs
+python Step3-LDpred-gibbs3.py Phenotype_1 0
+```
+
+**Note**: Each method should be run for all 5 folds (0-4) for each phenotype.
+
+#### Step 4: Aggregate Results and Generate Submissions
+
+```bash
+# Aggregate results across folds
+python Step4-ResultsGenerator.py
+
+# Generate submission files (best single method per phenotype)
+python Step4.2-GenerateSubmissionFile.py
+
+# Generate stacking ensemble predictions
+python Step4.4-GenerateSubmissionFileStacking.py
+
+# Organize submission files
+python Step4.3-RenameSubmissions.py
+python Step4.5-RenameSubmissions2.py
+```
+
+#### Step 6: Machine Learning Enhancement (Optional)
+
+```bash
+# Extract top SNPs and prepare ML data
+python Step6-MachineLearning.py Phenotype_1
+python Step6.0-GenerateDataForMachineLearning-P-valueThresholding.py Phenotype_1
+
+# Train deep learning models
+python Step6.1-MachineLearningModels.py Phenotype_1
+python Step6.2-MachineLearningModels2.py Phenotype_1
+
+# Generate ML-based submissions
+python Step7-GenerateSubmissionFile3.py
+```
+
+#### Step 8: Performance Analysis
+
+```bash
+# Generate performance heatmaps comparing all submissions
+python Step8-GenerateTestPerformanceHeatMapOfAllSubmissions.py
+```
+
+### Parallel Processing
+
+To process multiple phenotypes in parallel:
+
+```bash
+# Process phenotypes 1-10 in parallel (adjust based on available cores)
+for i in {1..10}; do
+    python Step2-TransformData.py Phenotype_$i &
+done
+wait
+
+# Run PRS methods in parallel for different folds
+for fold in {0..4}; do
+    python Step3-Plink3.py Phenotype_1 $fold &
+done
+wait
+```
+
+### Expected Runtime
+
+| Step | Per Phenotype | All 30 Phenotypes (parallel) |
+|------|---------------|------------------------------|
+| Step 1-2 | ~5 min | ~15 min |
+| Step 3 (all methods) | ~6-12 hours | ~12-24 hours |
+| Step 4 | ~10 min | ~30 min |
+| Step 6 (ML) | ~1-3 hours | ~3-6 hours |
+| **Total** | ~8-15 hours | ~16-30 hours |
+
+### Output Files
+
+After completing the pipeline, you'll find:
+
+- **`Submissions/`**: Primary submission files (best single method)
+- **`Submissions2/`**: Alternative submissions
+- **`Submissions3/`**: Ensemble/ML submissions
+- **`Results/`**: Summary tables and performance metrics
+- **`PRS_AUC_Analysis/`**: Detailed AUC analysis
+- **Figures**: Performance comparison plots (PNG files in root directory)
+
+### Customization
+
+To modify parameters:
+1. Edit the respective `Step3-*.py` files
+2. Adjust p-value thresholds, LD clumping parameters, etc.
+3. For ML models, edit architecture in `Step6.1-MachineLearningModels.py`
+
+### Troubleshooting
+
+**Issue**: "Command not found" errors for PLINK/GCTA/LDAK
+- **Solution**: Ensure tools are in PATH or provide full paths in scripts
+
+**Issue**: Memory errors during PRS calculation
+- **Solution**: Reduce batch size or number of parallel jobs
+
+**Issue**: R package installation fails
+- **Solution**: Install dependencies: `sudo apt-get install r-base-dev libcurl4-openssl-dev libssl-dev`
+
+For additional support, see [Issues & Support](#issues--support) section.
+
+---
+
 ### Command-Line Arguments
 
 Most scripts follow this pattern:
@@ -699,7 +950,17 @@ If you use this code or methodology in your research, please cite:
 ```
 
 ### Related Publications
- 
+
+**Relevant work from the authors:**
+
+1. Muneeb M, Ascher DB. Computational approaches to polygenic risk score prediction. *In preparation*.
+
+2. Ascher Lab publications on structural bioinformatics and disease prediction can be found at [BioSig Lab Publications](https://biosig.lab.uq.edu.au/publications/).
+
+**For CAGI7 PRS Challenge updates and publications, visit:**
+- CAGI Website: https://genomeinterpretation.org/
+- Challenge Publications: Will be announced post-challenge completion
+
 ---
 
 ## 🙏 Acknowledgments
@@ -709,8 +970,6 @@ If you use this code or methodology in your research, please cite:
 - **University of Queensland**: For computational resources
 - **BioSig Lab**: For guidance and support
 
----
- 
 ---
 
 ## 🐛 Issues & Support
