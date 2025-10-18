@@ -3,8 +3,7 @@
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg?style=for-the-badge&logo=python&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)
 ![Bioinformatics](https://img.shields.io/badge/Bioinformatics-Tool-blueviolet.svg?style=for-the-badge&logo=dna&logoColor=white)
-[![GitHub Stars](https://img.shields.io/github/stars/MuhammadMuneeb007/CAGI7_PRS_Simulated?style=social)](https://github.com/MuhammadMuneeb007/CAGI7_PRS_Simulated/stargazers)
-[![GitHub Forks](https://img.shields.io/github/forks/MuhammadMuneeb007/CAGI7_PRS_Simulated?style=social)](https://github.com/MuhammadMuneeb007/CAGI7_PRS_Simulated/network/members)
+
 
 <!-- Share Buttons -->
 
@@ -33,7 +32,7 @@
 
 ## 🎯 Overview
 
-This repository contains a comprehensive computational pipeline for the **CAGI7 (Critical Assessment of Genome Interpretation) Polygenic Risk Score (PRS) Challenge**. The challenge focuses on predicting disease outcomes for 30 simulated phenotypes and 4 real phenotypes (Type 2 Diabetes, Breast Cancer, Inflammatory Bowel Disease, and Coronary Artery Disease) using various state-of-the-art PRS methods.
+This repository contains a comprehensive computational pipeline for the **CAGI7 Polygenic Risk Score (PRS) Challenge**. The challenge focuses on predicting disease outcomes for 30 simulated phenotypes and 4 real phenotypes (Type 2 Diabetes, Breast Cancer, Inflammatory Bowel Disease, and Coronary Artery Disease) using various state-of-the-art PRS methods.
 
 The pipeline implements multiple PRS calculation methods, performs extensive cross-validation, generates predictions for validation cohorts, and employs advanced machine learning techniques for ensemble prediction.
 
@@ -110,11 +109,7 @@ Polygenic risk scores (PRS) aggregate the effects of many genetic variants to pr
    - Sample sizes: Training (5,000), Validation (50,000)
    - GWAS summary statistics (n=100,000)
 
-2. **4 Real Phenotypes**:
-   - Type 2 Diabetes (T2D)
-   - Breast Cancer (BC)
-   - Inflammatory Bowel Disease (IBD)
-   - Coronary Artery Disease (CAD)
+ 
 
 ### Dataset Characteristics
 
@@ -439,79 +434,7 @@ Implements multiple neural network architectures:
 | `Step6data_loaderMachineLearningModelstesting.py`               | Data loading utilities       | DataLoader, preprocessing      |
 
 ---
-
-## 🧬 PRS Methods Implemented
-
-### 1. **PLINK (P-value Thresholding)**
-
-- **Principle**: Simple additive model using SNPs below p-value threshold
-- **Advantages**: Fast, interpretable, widely used
-- **Implementation**: 5000 p-value thresholds tested
-
-### 2. **GCTA-COJO (Conditional and Joint Analysis)**
-
-- **Principle**: Joint effects estimation accounting for LD
-- **Advantages**: Reduces false positives from LD
-- **Implementation**: Stepwise conditional analysis
-
-### 3. **LDAK (LD-Adjusted Kinships)**
-
-- **Principle**: Weights SNPs by LD and MAF
-- **Advantages**: Improved heritability estimation
-- **Implementation**: Multiple kinship models (LDAK, LDAK-Thin, BLD-LDAK)
-
-### 4. **PRSice-2**
-
-- **Principle**: High-resolution threshold optimization
-- **Advantages**: Automatic best-fit threshold selection
-- **Implementation**: 100,000+ thresholds tested
-
-### 5. **LDpred-2 & Lassosum**
-
-- **Principle**: Bayesian shrinkage of effect sizes
-- **Advantages**: Accounts for LD structure, handles correlation
-- **Implementation**: Grid search over hyperparameters
-
-### 6. **LDpred-gibbs**
-
-- **Principle**: Gibbs sampling for posterior distributions
-- **Advantages**: Flexible modeling of causal architecture
-- **Implementation**: MCMC with burn-in and iterations
-
-### 7. **Deep Learning Ensemble**
-
-- **Principle**: Neural networks on genotype data
-- **Advantages**: Captures non-linear interactions
-- **Implementation**: Multiple architectures with cross-validation
-
----
-
-## � Detailed Methods Documentation
-
-For a comprehensive description of the methodology used for simulated phenotypes, including:
-
-- Complete data preparation and quality control procedures
-- Detailed algorithmic descriptions for each PRS method
-- Hyperparameter settings and optimization strategies
-- Machine learning architectures and training procedures
-- Model selection and evaluation criteria
-- Computational requirements and runtime estimates
-
-**Please refer to:** [`METHODS.txt`](METHODS.txt)
-
-This document provides publication-quality methods suitable for CAGI7 submission documentation and contains all technical details required to reproduce the analysis.
-
-### Key Topics Covered in METHODS.txt:
-
-1. **Data Preparation & QC**: GWAS transformation, quality filters, cross-validation setup
-2. **Six PRS Methods**: PLINK, GCTA-COJO, LDAK, PRSice-2, LDpred-2/Lassosum, LDpred-gibbs
-3. **Model Selection**: Performance metrics, hyperparameter tuning, fold aggregation
-4. **Machine Learning**: Three neural network architectures, training strategies, ensemble methods
-5. **Validation Predictions**: Final model generation, prediction format, quality checks
-6. **Computational Details**: Software versions, runtime estimates, resource requirements
-7. **Limitations**: Population specificity, model assumptions, technical constraints
-8. **Reproducibility**: Random seeds, code availability, validation procedures
-
+ 
 ---
 
 ## �🛠 Installation & Requirements
@@ -529,7 +452,6 @@ This document provides publication-quality methods suitable for CAGI7 submission
 
 ```bash
 pip install pandas numpy scipy scikit-learn matplotlib seaborn
-pip install torch torchvision torchaudio  # PyTorch for ML
 pip install umap-learn tqdm joblib
 ```
 
@@ -566,81 +488,11 @@ install.packages(c("data.table", "dplyr", "bigsnpr", "bigstatsr", "lassosum"))
 git clone https://github.com/MuhammadMuneeb007/CAGI7_PRS_Simulated.git
 cd CAGI7_PRS_Simulated
 
-# Install Python dependencies
-pip install -r requirements.txt  # Create this file with all packages
-
-# Download external tools
-bash install_tools.sh  # Script to download PLINK, GCTA, etc.
-
-# Set permissions
-chmod +x plink gcta ldak PRSice_linux
+ 
 ```
 
 ---
-
-## 🚀 Usage
-
-### Quick Start
-
-```bash
-# 1. Organize data
-python Step1-CopyFiles.py
-
-# 2. Transform GWAS data for Phenotype_1
-python Step2-TransformData.py Phenotype_1
-
-# 3. Run PRS methods (example: PLINK for Phenotype_1, Fold 0)
-python Step3-Plink3.py Phenotype_1 0
-
-# 4. Aggregate results for Phenotype_1
-python Step4-ResultsGenerator.py Phenotype_1
-
-# 5. Generate submission file
-python Step4.2-GenerateSubmissionFile.py Phenotype_1
-```
-
-### Running Full Pipeline
-
-```bash
-#!/bin/bash
-# Process all phenotypes
-
-for phenotype in {1..30}; do
-    PHENO="Phenotype_${phenotype}"
-    echo "Processing ${PHENO}"
-
-    # Transform data
-    python Step2-TransformData.py ${PHENO}
-
-    # Run all methods for all folds
-    for fold in {0..4}; do
-        python Step3-Plink3.py ${PHENO} ${fold} &
-        python Step3-GCTA3.py ${PHENO} ${fold} &
-        python Step3-LDAK-GWAS3.py ${PHENO} ${fold} &
-        python Step3-PRSice-2-3.py ${PHENO} ${fold} &
-        python Step3-LDpred-gibbs3.py ${PHENO} ${fold} &
-        wait
-    done
-
-    # Aggregate results
-    python Step4-ResultsGenerator.py ${PHENO}
-
-    # Generate submissions
-    python Step4.2-GenerateSubmissionFile.py ${PHENO}
-done
-
-# Machine learning enhancement
-for phenotype in {1..30}; do
-    PHENO="Phenotype_${phenotype}"
-    python Step6-MachineLearning.py ${PHENO}
-    python Step6.1-MachineLearningModels.py ${PHENO}
-    python Step7-GenerateSubmissionFile3.py ${PHENO}
-done
-
-# Generate performance comparison
-python Step8-GenerateTestPerformanceHeatMapOfAllSubmissions.py
-```
-
+ 
 ### Command-Line Arguments
 
 Most scripts follow this pattern:
@@ -816,29 +668,7 @@ _These plots show the detailed performance analysis for individual methods on Ph
 </details>
 
 > **Note:** Additional detailed figures for all phenotypes and methods are available in the `Results/` and `PRS_AUC_Analysis/` directories.
-
-### Performance Summary
-
-| Method       | Mean AUC  | Std Dev   | Best Phenotype  | Worst Phenotype |
-| ------------ | --------- | --------- | --------------- | --------------- |
-| PLINK P+T    | 0.XXX     | 0.XXX     | Phenotype_X     | Phenotype_Y     |
-| GCTA-COJO    | 0.XXX     | 0.XXX     | Phenotype_X     | Phenotype_Y     |
-| LDAK         | 0.XXX     | 0.XXX     | Phenotype_X     | Phenotype_Y     |
-| PRSice-2     | 0.XXX     | 0.XXX     | Phenotype_X     | Phenotype_Y     |
-| LDpred-2     | 0.XXX     | 0.XXX     | Phenotype_X     | Phenotype_Y     |
-| LDpred-gibbs | 0.XXX     | 0.XXX     | Phenotype_X     | Phenotype_Y     |
-| **Ensemble** | **0.XXX** | **0.XXX** | **Phenotype_X** | **Phenotype_Y** |
-
-_Note: Fill in actual results after running pipeline_
-
-### Key Findings
-
-1. **Method Comparison**: [Summary of which methods performed best]
-2. **Genetic Architecture**: [Insights on how genetic architecture affects PRS performance]
-3. **Ensemble Benefits**: [Improvement from combining methods]
-4. **Machine Learning**: [Deep learning performance vs traditional methods]
-
----
+ 
 
 ## 👨‍💼 Author Information
 
@@ -869,58 +699,18 @@ If you use this code or methodology in your research, please cite:
 ```
 
 ### Related Publications
-
-_Add relevant publications here once available_
-
+ 
 ---
 
 ## 🙏 Acknowledgments
 
 - **CAGI Organizers**: For providing the challenge framework and data
 - **CAGI7 PRS Challenge Organizers**: Sung Chun and Shamil Sunyaev (Harvard Medical School)
-- **Data Providers**:
-  - UK Biobank
-  - MGB Biobank
-  - 1000 Genomes Project
-- **Tool Developers**:
-  - PLINK team (Shaun Purcell, Christopher Chang)
-  - GCTA team (Jian Yang et al.)
-  - LDAK team (Doug Speed)
-  - PRSice-2 team (Shing Wan Choi et al.)
-  - LDpred developers (Bjarni Vilhjálmsson, Florian Privé et al.)
 - **University of Queensland**: For computational resources
 - **BioSig Lab**: For guidance and support
 
 ---
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-```
-MIT License
-
-Copyright (c) 2025 Muhammad Muneeb
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
-
+ 
 ---
 
 ## 🐛 Issues & Support
@@ -929,18 +719,10 @@ For bug reports, feature requests, or questions:
 
 1. **GitHub Issues**: [Create an issue](https://github.com/MuhammadMuneeb007/CAGI7_PRS_Simulated/issues)
 2. **Email**: muneebsiddique007@gmail.com
-3. **Documentation**: Check this README first
+ 
 
 ---
-
-## 🔄 Version History
-
-- **v1.0.0** (November 2025): Initial release for CAGI7 challenge
-  - Implemented 6 PRS methods
-  - 5-fold cross-validation framework
-  - Deep learning ensemble models
-  - Comprehensive evaluation pipeline
-
+ 
 ---
 
 ## 📖 References
@@ -1009,5 +791,3 @@ PhD Candidate, The University of Queensland
 If you find this repository useful, please consider giving it a ⭐!
 
 </div>
-
-
